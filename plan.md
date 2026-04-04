@@ -1,148 +1,236 @@
-# plan.md — MindLeaf (React + FastAPI) Development Plan
+# plan.md — MindLeaf (React + FastAPI) Development Plan (Updated)
 
 ## 1) Objectives
-- Deliver a working web-based MVP for **AI children’s stories**: prompt → story pages → illustrations → read aloud → save → view in library → export PDF.
-- Prove and harden the **core AI pipeline** (Gemini text + Nano Banana images) before building the full app.
-- Implement a **clean REST API** (FastAPI) reusable by a future Flutter frontend.
-- Add **Paystack** payments with webhook-based credit top-ups.
+- Deliver a working web-based product for **AI children’s stories**: prompt → story pages → illustrations → read aloud → save → view in library → export PDF.
+- Ensure the backend remains a **clean REST API** reusable by a future Flutter frontend.
+- Add **production-ready auth** (JWT access token + refresh token in httpOnly cookie).
+- Add **payments scaffolding** for Nigerian payments (**Paystack**) with placeholder keys (keys added later).
+- Improve story quality with:
+  - a **proper cover/thumbnail “front page”** as the first page (book-cover style with title)
+  - **character consistency** across all illustrations via prompt + model strategy.
+- Add **admin panel** for user management (credits + roles).
+
+**Status:** Phase 1 and Phase 2 are completed and tested (100% backend, 95% frontend).
 
 ---
 
 ## 2) Implementation Steps
 
-### Phase 1 — Core POC (Isolation: AI + Storage)
+### Phase 1 — Core POC (Isolation: AI + Storage) ✅ COMPLETED
 **Goal:** Prove end-to-end story generation works reliably (text + N illustrations) and can be saved/returned.
 
-User stories:
-1. As a builder, I want a script that generates a multi-page story so I can validate Gemini output format.
-2. As a builder, I want a script that generates one illustration per page so I can validate Nano Banana integration.
-3. As a builder, I want to persist a generated story to MongoDB and reload it so I can verify data modeling.
-4. As a builder, I want deterministic retries/backoff so temporary model failures don’t break generation.
-5. As a builder, I want a single “generate_story()” backend function so the app can call one endpoint.
+Completed outcomes:
+- Gemini text generation stable in strict JSON format.
+- Nano Banana illustration generation working (base64 images).
+- MongoDB storage CRUD validated.
 
-Steps:
-- Websearch/Playbook check: verify Emergent LLM usage patterns + Nano Banana image generation best practices (prompting, size, latency).
-- Define story JSON contract (title, pages[{page_no,text,image_url/base64}], metadata: age_range, subject, art_style).
-- Write minimal Python POC scripts:
-  - `poc_gemini_text.py`: generate 3–5 pages with strict JSON schema.
-  - `poc_nano_banana_image.py`: generate 1 image from a page summary.
-  - `poc_end_to_end.py`: text → images → store in Mongo → load → print stats.
-- Iterate prompts + schema validation until stable.
-
-Exit criteria:
-- 3 consecutive runs succeed producing valid JSON + images and saving/reloading from Mongo.
+Exit criteria achieved:
+- POC passed with repeated successful runs.
 
 ---
 
-### Phase 2 — V1 App Development (No Auth Initially)
-**Goal:** Build a usable MVP around the proven core flow; use a simple “demo user” until Phase 4.
+### Phase 2 — V1 App Development (No Auth Initially) ✅ COMPLETED
+**Goal:** Build a usable MVP around the proven core flow; use a simple demo user until auth is added.
 
-User stories:
-1. As a parent, I want to fill a story form and generate a story so my child can read it.
-2. As a reader, I want to flip pages horizontally so it feels like a real storybook.
-3. As a parent, I want the story read aloud using browser voices so my child can listen.
-4. As a parent, I want to download a PDF so I can print/share the story.
-5. As a user, I want a library grid so I can revisit generated stories later.
-
-Backend (FastAPI):
-- Implement core endpoints (no auth):
-  - `POST /api/stories/generate` (credits simulated server-side for demo user)
-  - `GET /api/stories` (list)
+Completed features:
+- React web UI (green/orange, web style) with:
+  - Dashboard (credits + actions + trending topics)
+  - Story Creator form (topic chips, age range, subject, length w/ credit costs, art style, optional fields)
+  - Viewer (page navigation, illustration+text layout, TTS controls via Web Speech API, PDF export)
+  - Library grid with covers + delete
+- FastAPI backend endpoints implemented:
+  - `POST /api/stories/generate`
+  - `GET /api/stories`
   - `GET /api/stories/{id}`
   - `DELETE /api/stories/{id}`
-  - `GET /api/health`
-- Implement PDF export:
-  - `GET /api/stories/{id}/pdf` → returns PDF bytes
-- Store images:
-  - MVP: store as base64 or persist to server/static + store URL (choose simplest reliable).
+  - `GET /api/stories/{id}/pdf`
+  - `GET /api/health`, `GET /api/user/me`, `GET /api/credits`
 
-Frontend (React web, green/orange playful theme but “web style”):
-- Pages: Home, New Story, Viewer, Library.
-- Story Creator form with chips, selectors, credit cost cards, loading overlay steps.
-- Viewer:
-  - Horizontal page navigation (buttons/trackpad friendly)
-  - Web Speech API play/pause + voice selector mapping
-  - Export PDF button
-- Library grid with cover + delete.
-
-Phase end: 1 round of end-to-end testing (generate → view → TTS → PDF → library delete).
+Testing results:
+- Backend: 100% pass
+- Frontend: 95% pass (minor PDF export timeout during automated run; functionally OK)
 
 ---
 
-### Phase 3 — Payments + Credits (Paystack)
-**Goal:** Real credit purchases via Paystack + server-side credit ledger.
+### Phase 3 — Auth + Payments Scaffolding + Story Quality Upgrade + Admin (Combined Phase) 🔧 IN PROGRESS
+**Goal:** Upgrade MVP into a production-lean system by adding auth, admin, Paystack scaffolding, and story quality improvements.
 
-User stories:
-1. As a user, I want to buy credits with Paystack so I can generate more stories.
-2. As a user, I want my credits updated automatically after payment so I don’t contact support.
-3. As a user, I want to see my credit balance on the dashboard so I can plan story length.
-4. As a user, I want failed/abandoned payments to not add credits so the system is fair.
-5. As an admin, I want to see payment events so I can troubleshoot issues.
-
-Steps:
-- Add data models: credit_transactions, payment_orders.
-- Add endpoints:
-  - `POST /api/payments/paystack/init` (create transaction, return authorization_url)
-  - `POST /api/payments/paystack/webhook` (verify signature, confirm with Paystack API, credit user)
-  - `GET /api/payments/history` (user)
-- Add frontend Buy Credits page with packages and Paystack redirect flow.
-- Ensure idempotency in webhook (same reference can’t credit twice).
-
-Phase end: 1 round of payment flow testing (test mode) + webhook verification.
-
----
-
-### Phase 4 — Auth + Admin (Production-lean)
-**Goal:** Add JWT auth + refresh cookie; secure credits, stories, admin tools.
+#### 3A) Authentication (JWT + Refresh Cookie)
+**Goal:** Users can register/login; sessions refresh seamlessly; all user data is isolated.
 
 User stories:
 1. As a user, I want to register/login so my stories and credits are tied to my account.
 2. As a user, I want my session to refresh seamlessly so I’m not logged out unexpectedly.
-3. As a user, I want only my library visible so privacy is preserved.
-4. As an admin, I want to grant credits so I can support users.
-5. As an admin, I want to promote/demote roles so I can manage the platform.
+3. As a user, I want only my stories visible for privacy.
 
-Steps:
-- Implement auth endpoints (`/api/auth/register|login|refresh|logout`) with refresh cookie.
-- Update stories endpoints to require auth + enforce ownership.
-- Admin endpoints:
-  - `GET /api/admin/users`
-  - `POST /api/admin/users/{id}/credits`
-  - `POST /api/admin/users/{id}/role`
-- Frontend: auth pages + admin dashboard + protected routes.
+Backend tasks:
+- Add libraries: `bcrypt` (or `passlib[bcrypt]`), `PyJWT` (or `python-jose`), cookie utilities.
+- Create user schema:
+  - `display_name`, `email`, `password_hash`, `role` (user/admin), `credits`, timestamps.
+- Implement auth endpoints:
+  - `POST /api/auth/register`
+  - `POST /api/auth/login`
+  - `POST /api/auth/refresh` (uses httpOnly cookie)
+  - `POST /api/auth/logout` (clears cookie)
+- Token strategy:
+  - Access token: short expiry (e.g., 15m) returned to frontend.
+  - Refresh token: longer expiry (e.g., 7–30d) stored in httpOnly cookie.
+- Add auth middleware/dependencies:
+  - `get_current_user()` from Authorization Bearer access token.
+  - Ownership enforcement for stories.
+- Migrate Phase 2 “demo user” flow to authenticated users.
 
-Phase end: 1 round of end-to-end testing across roles (user vs admin).
+Frontend tasks:
+- Add auth pages:
+  - `/login`, `/register`
+- Add auth state management:
+  - store access token in memory (or short-lived storage), auto-refresh using `/api/auth/refresh`.
+- Protect routes:
+  - `/create`, `/library`, `/story/:id`, `/admin`
+- Update navbar:
+  - show user menu + logout.
+
+Exit criteria:
+- Register → Login → Refresh → Logout works.
+- Stories are scoped to the logged-in user.
 
 ---
 
-### Phase 5 — Hardening, UX polish, Regression Testing
+#### 3B) Paystack Payments (Scaffolding with Placeholder Keys)
+**Goal:** Add the payment flow and endpoints with placeholders; user can later insert real Paystack keys.
+
+User stories:
+1. As a user, I want to buy credits with Paystack.
+2. As a user, I want credits to be added only after successful verification.
+
+Backend tasks:
+- Add env placeholders:
+  - `PAYSTACK_SECRET_KEY=sk_test_xxx` (placeholder)
+  - `PAYSTACK_PUBLIC_KEY=pk_test_xxx` (placeholder)
+  - `PAYSTACK_WEBHOOK_SECRET` (if needed)
+- Add `httpx` dependency.
+- Create payment models:
+  - `payment_orders` (reference, user_id, package_id, amount_ngn, credits, status)
+  - `credit_transactions` ledger (reason, delta, reference, timestamps)
+- Implement endpoints:
+  - `POST /api/payments/paystack/init` → initializes transaction, returns `authorization_url` + `reference`
+  - `GET /api/payments/paystack/verify/{reference}` → verify after callback
+  - `POST /api/payments/paystack/webhook` → signature verification + idempotent crediting
+- Add idempotency:
+  - one reference cannot credit twice.
+
+Frontend tasks:
+- Add `/buy-credits` page with credit packages.
+- Implement redirect to Paystack `authorization_url`.
+- Add `/payment/callback` page:
+  - extracts reference, calls verify endpoint, updates UI + credit balance.
+
+Exit criteria:
+- All endpoints exist and are wired; keys can be inserted later to go live.
+
+---
+
+#### 3C) Story Quality Upgrade: Cover Page + Character Consistency
+**Goal:** Make each story feel like a real book and improve illustration continuity.
+
+User stories:
+1. As a reader, I want a beautiful cover page with the title before the story starts.
+2. As a reader, I want characters to look consistent across pages.
+
+Backend tasks:
+- Modify story generation contract to include:
+  - `cover`: { title, cover_prompt, image_base64 }
+  - `characters`: structured “character bible” (name, appearance, clothing, distinguishing features)
+  - `pages`: page text + illustration prompts that reference the character bible.
+- Generation strategy:
+  1. Generate **character bible** + story outline first.
+  2. Generate cover prompt using the bible.
+  3. Generate per-page illustration prompts that reuse the bible verbatim.
+- Prompt rules:
+  - Always include the same **exact descriptive phrases** (hair, skin tone if specified by user—otherwise avoid sensitive attributes; outfit colors; unique accessory).
+  - Include consistent environment motifs.
+  - Keep style consistent (same art_style descriptor each page).
+- Viewer/library changes:
+  - cover image used as library thumbnail.
+  - viewer page 1 becomes a cover page (title + cover art), then story pages.
+
+Frontend tasks:
+- Story Viewer:
+  - render cover as the first page with title overlay.
+- Library:
+  - show cover image as thumbnail.
+
+Exit criteria:
+- Every story begins with a visually strong cover page.
+- Illustration prompts are consistently structured to improve continuity.
+
+---
+
+#### 3D) Admin Dashboard
+**Goal:** Allow admin to manage users, roles, and credits.
+
+User stories:
+1. As an admin, I want to view all users.
+2. As an admin, I want to grant credits.
+3. As an admin, I want to change roles.
+
+Backend tasks:
+- Admin-only endpoints:
+  - `GET /api/admin/users`
+  - `POST /api/admin/users/{id}/credits` (grant/deduct)
+  - `POST /api/admin/users/{id}/role`
+- Add role-based authorization checks.
+
+Frontend tasks:
+- Add `/admin` page with a table:
+  - user email, display name, role, credits, actions.
+- Add dialogs to grant credits and change role.
+
+Exit criteria:
+- Admin can manage users securely.
+
+---
+
+### Phase 4 — Hardening, UX Polish, Regression Testing
+**Goal:** Stabilize production behavior, improve performance, and ensure safety.
+
 User stories:
 1. As a user, I want generation failures to show clear errors and not charge credits.
-2. As a user, I want to retry generation so temporary AI failures don’t stop me.
-3. As a user, I want faster page loads so the app feels smooth.
-4. As a parent, I want content to be age-appropriate so it’s safe for kids.
-5. As a builder, I want stable APIs so my future Flutter app can integrate easily.
+2. As a user, I want retries so temporary AI failures don’t stop me.
+3. As a parent, I want age-appropriate and safe content.
+4. As a builder, I want stable APIs for future Flutter integration.
 
 Steps:
-- Add structured logging, request IDs, timeouts/retries.
-- Add content safety constraints in prompts.
+- Add structured logging + request IDs.
+- Add timeouts/retries for AI + Paystack HTTP calls.
+- Ensure credit charging is transactional:
+  - only deduct after successful generation/save.
 - Add basic rate limiting per user.
-- API documentation (OpenAPI tags + examples).
-- Regression tests (core endpoints + auth + payment webhook idempotency).
+- Prompt safety constraints:
+  - age-appropriate language, avoid frightening content for younger ages.
+- OpenAPI documentation with examples.
+- Regression tests:
+  - auth flows
+  - story generation + credits
+  - payment webhook idempotency
+  - admin permissions
 
 ---
 
-## 3) Next Actions
-1. Run Phase 1 POC: implement the 3 Python scripts and validate Gemini Flash + Nano Banana outputs.
-2. Confirm the story JSON schema and illustration count rules (pages vs length option).
-3. Ask for/prepare Paystack keys later (Phase 3) + decide test mode.
-4. After POC passes, build Phase 2 MVP (React + FastAPI) in one cohesive pass.
+## 3) Next Actions (Updated)
+1. Implement **Auth** end-to-end (register/login/refresh/logout) and migrate stories to per-user ownership.
+2. Implement **Story Cover Page + Character Bible** pipeline updates (cover first page + better character consistency prompts).
+3. Add **Admin dashboard** (backend endpoints + frontend page).
+4. Add **Paystack scaffolding** endpoints and frontend pages (placeholder keys; user plugs real keys later).
+5. Run another full end-to-end test sweep.
 
 ---
 
-## 4) Success Criteria
-- Core: generate story text + N illustrations reliably and save/retrieve from Mongo.
-- MVP: user can generate, view page-by-page, listen via Web Speech, export PDF, and manage a library.
-- Payments: Paystack purchase credits works with webhook verification + idempotency.
-- Auth/Admin: JWT + refresh cookie works; user isolation enforced; admin can manage users/credits.
-- Backend: REST API clean enough for a future Flutter client without changes.
+## 4) Success Criteria (Updated)
+- ✅ Core AI pipeline: story text + N illustrations reliably generated and stored.
+- ✅ MVP UX: user can generate, view page-by-page, use Web Speech TTS controls, export PDF, and manage a library.
+- 🔧 Auth: JWT + refresh cookie works; user isolation enforced.
+- 🔧 Payments: Paystack integration scaffolding complete; can go live by inserting keys + webhook URL.
+- 🔧 Story Quality: each story has a cover/thumbnail first page; characters are more consistent across pages.
+- 🔧 Admin: admin can manage users/credits/roles.
+- ✅ Backend: REST API remains clean and reusable for future Flutter client.

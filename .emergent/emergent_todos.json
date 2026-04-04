@@ -1,62 +1,30 @@
 [
   {
-    "content": "Phase 1: Get integration playbooks (Gemini text + Nano Banana images)",
+    "content": "Phase 1-2: Core POC + MVP App (completed, tested)",
     "status": "completed"
   },
   {
-    "content": "Phase 1: Get Emergent LLM Key",
-    "status": "completed"
-  },
-  {
-    "content": "Phase 1: Write & run POC script (Gemini text + Nano Banana images + MongoDB)",
-    "status": "completed"
-  },
-  {
-    "content": "Phase 1: Fix POC until all tests pass",
-    "status": "completed"
-  },
-  {
-    "content": "Phase 2: Get design guidelines",
-    "status": "completed"
-  },
-  {
-    "content": "Phase 2: Backend implementation (all endpoints)",
-    "status": "completed"
-  },
-  {
-    "content": "Phase 2: Frontend implementation (all pages)",
-    "status": "completed"
-  },
-  {
-    "content": "Phase 2: All user stories covered in Development and testing",
-    "status": "completed"
-  },
-  {
-    "content": "Phase 2: End-to-end testing with testing agent",
-    "status": "completed"
-  },
-  {
-    "content": "Phase 3: Get Paystack integration playbook",
+    "content": "Phase 3-4: Add Auth system (JWT register/login/refresh)",
     "status": "in_progress"
   },
   {
-    "content": "Phase 3: Ask user for Paystack API key",
+    "content": "Phase 3-4: Add Paystack payment code (placeholder keys)",
     "status": "pending"
   },
   {
-    "content": "Phase 3: Implement Paystack payment + Buy Credits page",
+    "content": "Phase 3-4: Improve story generation - cover page/thumbnail + character consistency",
     "status": "pending"
   },
   {
-    "content": "Phase 3: Test payment flow",
+    "content": "Phase 3-4: Admin Dashboard (user management, grant credits, change roles)",
     "status": "pending"
   },
   {
-    "content": "Phase 4: Auth + Admin system",
+    "content": "Phase 3-4: Frontend updates (auth screens, buy credits, admin, cover pages)",
     "status": "pending"
   },
   {
-    "content": "Phase 5: Hardening & final testing",
+    "content": "Phase 3-4: End-to-end testing",
     "status": "pending"
   }
 ]
