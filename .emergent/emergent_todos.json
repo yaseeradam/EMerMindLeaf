@@ -29,14 +29,26 @@
   },
   {
     "content": "Phase 2: All user stories covered in Development and testing",
-    "status": "in_progress"
+    "status": "completed"
   },
   {
     "content": "Phase 2: End-to-end testing with testing agent",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 3: Get Paystack integration playbook",
+    "status": "in_progress"
+  },
+  {
+    "content": "Phase 3: Ask user for Paystack API key",
     "status": "pending"
   },
   {
-    "content": "Phase 3: Paystack payment integration",
+    "content": "Phase 3: Implement Paystack payment + Buy Credits page",
+    "status": "pending"
+  },
+  {
+    "content": "Phase 3: Test payment flow",
     "status": "pending"
   },
   {
