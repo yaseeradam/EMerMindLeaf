@@ -1,30 +1,14 @@
 [
   {
-    "content": "Phase 1-2: Core POC + MVP App (completed, tested)",
+    "content": "Phase 1-2: Core POC + MVP App",
     "status": "completed"
   },
   {
-    "content": "Phase 3-4: Add Auth system (JWT register/login/refresh)",
+    "content": "Phase 3-4: Auth + Paystack + Admin + Cover Pages + Character Consistency",
     "status": "completed"
   },
   {
-    "content": "Phase 3-4: Add Paystack payment code (placeholder keys)",
-    "status": "completed"
-  },
-  {
-    "content": "Phase 3-4: Improve story generation - cover page/thumbnail + character consistency",
-    "status": "completed"
-  },
-  {
-    "content": "Phase 3-4: Admin Dashboard (user management, grant credits, change roles)",
-    "status": "completed"
-  },
-  {
-    "content": "Phase 3-4: Frontend updates (auth screens, buy credits, admin, cover pages)",
-    "status": "completed"
-  },
-  {
-    "content": "Phase 3-4: End-to-end testing",
+    "content": "Fix: Async story generation with polling (no more timeout/stuck at 95%)",
     "status": "completed"
   }
 ]

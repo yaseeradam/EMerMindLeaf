@@ -480,20 +480,17 @@ function StoryCreatorPage() {
   const [characterTraits, setCharacterTraits] = useState('');
   const [settingDetails, setSettingDetails] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [loadingStep, setLoadingStep] = useState(0);
+  const [loadingStepText, setLoadingStepText] = useState('Starting...');
   const [progress, setProgress] = useState(0);
+  const pollingRef = useRef(null);
 
   useEffect(() => {
     const state = window.history.state?.usr;
     if (state?.topic) setTopic(state.topic);
   }, []);
 
-  useEffect(() => {
-    if (!isGenerating) return;
-    const stepInterval = setInterval(() => { setLoadingStep(prev => Math.min(prev + 1, LOADING_STEPS.length - 1)); }, 10000);
-    const progressInterval = setInterval(() => { setProgress(prev => Math.min(prev + 0.5, 95)); }, 500);
-    return () => { clearInterval(stepInterval); clearInterval(progressInterval); };
-  }, [isGenerating]);
+  // Cleanup polling on unmount
+  useEffect(() => { return () => { if (pollingRef.current) clearInterval(pollingRef.current); }; }, []);
 
   const handleGenerate = async () => {
     if (!topic.trim()) { toast.error('Please enter a topic for your story'); return; }
@@ -501,20 +498,43 @@ function StoryCreatorPage() {
     if ((user?.credits ?? 0) < cost) { toast.error(`Not enough credits. You need ${cost} but have ${user?.credits ?? 0}`); return; }
 
     setIsGenerating(true);
-    setLoadingStep(0);
+    setLoadingStepText('Starting...');
     setProgress(0);
 
     try {
-      const story = await api.post('/api/stories/generate', {
+      // Start async generation
+      const { job_id } = await api.post('/api/stories/generate', {
         topic: topic.trim(), age_range: ageRange, subject, length, art_style: artStyle,
         character_traits: characterTraits || null, setting_details: settingDetails || null,
       });
-      setProgress(100);
-      toast.success('Story created successfully!');
-      await refreshUser();
-      setTimeout(() => navigate(`/story/${story._id}`), 500);
+
+      // Poll for status every 2 seconds
+      pollingRef.current = setInterval(async () => {
+        try {
+          const status = await api.get(`/api/stories/generate/status/${job_id}`);
+          setProgress(status.progress || 0);
+          setLoadingStepText(status.step || 'Working...');
+
+          if (status.status === 'completed' && status.story_id) {
+            clearInterval(pollingRef.current);
+            pollingRef.current = null;
+            setProgress(100);
+            toast.success('Story created successfully!');
+            await refreshUser();
+            setTimeout(() => navigate(`/story/${status.story_id}`), 500);
+          } else if (status.status === 'failed') {
+            clearInterval(pollingRef.current);
+            pollingRef.current = null;
+            toast.error(status.error || 'Story generation failed');
+            setIsGenerating(false);
+          }
+        } catch (pollErr) {
+          console.error('Polling error:', pollErr);
+        }
+      }, 2000);
+
     } catch (err) {
-      toast.error(err.message || 'Failed to generate story');
+      toast.error(err.message || 'Failed to start generation');
       setIsGenerating(false);
     }
   };
@@ -529,7 +549,7 @@ function StoryCreatorPage() {
             <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}>
               <Leaf size={60} style={{ color: 'hsl(132, 46%, 33%)' }} />
             </motion.div>
-            <p className="step-text mt-6" data-testid="loading-step-text">{LOADING_STEPS[loadingStep]}</p>
+            <p className="step-text mt-6" data-testid="loading-step-text">{loadingStepText}</p>
             <p className="sub-text">Creating a magical story just for you...</p>
             <div className="w-64 mt-6"><Progress value={progress} className="h-2" /></div>
             <p className="text-xs text-[hsl(var(--muted-foreground))] mt-2">{Math.round(progress)}%</p>

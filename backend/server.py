@@ -5,6 +5,7 @@ import base64
 import hmac
 import hashlib
 import traceback
+import asyncio
 from datetime import datetime, timedelta
 from io import BytesIO
 from typing import Optional
@@ -51,6 +52,7 @@ db = client[DB_NAME]
 stories_collection = db["stories"]
 users_collection = db["users"]
 payments_collection = db["payments"]
+jobs_collection = db["generation_jobs"]
 
 # ─── AUTH ───
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -442,74 +444,93 @@ async def get_current_user_info(user=Depends(get_current_user)):
 
 
 # ═══════════════════════════════════════
-# STORY ROUTES
+# STORY ROUTES (Async background generation)
 # ═══════════════════════════════════════
 
-@app.post("/api/stories/generate")
-async def generate_story(request: StoryRequest, user=Depends(get_current_user)):
+async def _run_story_generation(job_id: str, user_id: str, request_data: dict):
+    """Background task: generates story text + images, updates job status in DB"""
     try:
-        credits_needed = CREDIT_COSTS.get(request.length, 1)
+        # Update status: writing story
+        await jobs_collection.update_one(
+            {"_id": ObjectId(job_id)},
+            {"$set": {"status": "generating_text", "step": "Writing your story...", "progress": 10}}
+        )
         
-        if user.get("credits", 0) < credits_needed:
-            raise HTTPException(
-                status_code=402,
-                detail=f"Not enough credits. Need {credits_needed}, have {user.get('credits', 0)}"
-            )
-        
-        # Step 1: Generate story text with character bible
         story_data = await generate_story_text(
-            topic=request.topic,
-            age_range=request.age_range,
-            subject=request.subject,
-            length=request.length,
-            character_traits=request.character_traits,
-            setting_details=request.setting_details
+            topic=request_data["topic"],
+            age_range=request_data["age_range"],
+            subject=request_data["subject"],
+            length=request_data["length"],
+            character_traits=request_data.get("character_traits"),
+            setting_details=request_data.get("setting_details")
         )
         
         character_bible = story_data.get("character_bible", {})
+        total_images = len(story_data.get("pages", [])) + 1  # pages + cover
         
-        # Step 2: Generate cover illustration
+        # Update status: painting cover
+        await jobs_collection.update_one(
+            {"_id": ObjectId(job_id)},
+            {"$set": {"status": "generating_cover", "step": "Painting the cover page...", "progress": 25}}
+        )
+        
         cover_prompt = story_data.get("cover", {}).get("cover_illustration_prompt", "")
         if not cover_prompt:
             main_char = character_bible.get("main_character", {})
             cover_prompt = f"A beautiful children's book cover featuring {main_char.get('name', 'the main character')} - {main_char.get('appearance', '')} wearing {main_char.get('outfit', '')}. Title: {story_data.get('title', '')}. Dramatic, eye-catching."
         
         try:
-            cover_image = await generate_illustration(cover_prompt, request.art_style)
+            cover_image = await generate_illustration(cover_prompt, request_data.get("art_style", "default"))
         except Exception as e:
             print(f"Cover image generation failed: {e}")
             cover_image = None
         
-        # Step 3: Generate page illustrations
+        # Generate page illustrations
         pages_with_images = []
-        for page in story_data.get("pages", []):
+        for idx, page in enumerate(story_data.get("pages", [])):
+            progress = 30 + int((idx / max(total_images, 1)) * 60)
+            await jobs_collection.update_one(
+                {"_id": ObjectId(job_id)},
+                {"$set": {
+                    "status": "generating_illustrations",
+                    "step": f"Creating illustration {idx + 1} of {len(story_data.get('pages', []))}...",
+                    "progress": min(progress, 90)
+                }}
+            )
+            
             try:
                 image_base64 = await generate_illustration(
                     page.get("illustration_prompt", page.get("text", "")),
-                    request.art_style
+                    request_data.get("art_style", "default")
                 )
             except Exception as img_err:
                 print(f"Image generation failed for page {page.get('page_number')}: {img_err}")
                 image_base64 = None
             
             pages_with_images.append({
-                "page_number": page.get("page_number", len(pages_with_images) + 1),
+                "page_number": page.get("page_number", idx + 1),
                 "text": page.get("text", ""),
                 "illustration_prompt": page.get("illustration_prompt", ""),
                 "image_base64": image_base64
             })
         
-        # Step 4: Save to MongoDB
+        # Save story
+        await jobs_collection.update_one(
+            {"_id": ObjectId(job_id)},
+            {"$set": {"status": "saving", "step": "Saving your story...", "progress": 95}}
+        )
+        
+        credits_needed = CREDIT_COSTS.get(request_data["length"], 1)
         story_doc = {
-            "title": story_data.get("title", f"Story about {request.topic}"),
-            "user_id": str(user["_id"]),
-            "topic": request.topic,
-            "age_range": request.age_range,
-            "subject": request.subject,
-            "length": request.length,
-            "art_style": request.art_style,
-            "character_traits": request.character_traits,
-            "setting_details": request.setting_details,
+            "title": story_data.get("title", f"Story about {request_data['topic']}"),
+            "user_id": user_id,
+            "topic": request_data["topic"],
+            "age_range": request_data["age_range"],
+            "subject": request_data["subject"],
+            "length": request_data["length"],
+            "art_style": request_data.get("art_style", "default"),
+            "character_traits": request_data.get("character_traits"),
+            "setting_details": request_data.get("setting_details"),
             "credits_used": credits_needed,
             "character_bible": character_bible,
             "cover_image": cover_image,
@@ -519,23 +540,80 @@ async def generate_story(request: StoryRequest, user=Depends(get_current_user)):
         }
         
         result = await stories_collection.insert_one(story_doc)
-        story_doc["_id"] = result.inserted_id
+        story_id = str(result.inserted_id)
         
-        # Step 5: Deduct credits
+        # Deduct credits
         await users_collection.update_one(
-            {"_id": user["_id"]},
+            {"_id": ObjectId(user_id)},
             {"$inc": {"credits": -credits_needed}, "$set": {"updated_at": datetime.utcnow()}}
         )
         
-        return serialize_doc(story_doc)
+        # Mark job complete
+        await jobs_collection.update_one(
+            {"_id": ObjectId(job_id)},
+            {"$set": {"status": "completed", "step": "Story ready!", "progress": 100, "story_id": story_id, "completed_at": datetime.utcnow()}}
+        )
         
-    except HTTPException:
-        raise
-    except json.JSONDecodeError as e:
-        raise HTTPException(status_code=500, detail=f"Failed to parse story from AI: {str(e)}")
     except Exception as e:
         print(f"Story generation error: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Story generation failed: {str(e)}")
+        await jobs_collection.update_one(
+            {"_id": ObjectId(job_id)},
+            {"$set": {"status": "failed", "step": f"Generation failed: {str(e)}", "progress": 0, "error": str(e), "completed_at": datetime.utcnow()}}
+        )
+
+
+@app.post("/api/stories/generate")
+async def start_story_generation(request: StoryRequest, user=Depends(get_current_user)):
+    """Start async story generation - returns job_id for polling"""
+    credits_needed = CREDIT_COSTS.get(request.length, 1)
+    
+    if user.get("credits", 0) < credits_needed:
+        raise HTTPException(
+            status_code=402,
+            detail=f"Not enough credits. Need {credits_needed}, have {user.get('credits', 0)}"
+        )
+    
+    # Create job record
+    job_doc = {
+        "user_id": str(user["_id"]),
+        "status": "queued",
+        "step": "Starting...",
+        "progress": 0,
+        "story_id": None,
+        "error": None,
+        "request_data": request.dict(),
+        "created_at": datetime.utcnow()
+    }
+    result = await jobs_collection.insert_one(job_doc)
+    job_id = str(result.inserted_id)
+    
+    # Launch background task
+    asyncio.create_task(_run_story_generation(job_id, str(user["_id"]), request.dict()))
+    
+    return {"job_id": job_id, "status": "queued"}
+
+
+@app.get("/api/stories/generate/status/{job_id}")
+async def get_generation_status(job_id: str, user=Depends(get_current_user)):
+    """Poll this endpoint to check story generation progress"""
+    try:
+        job = await jobs_collection.find_one({"_id": ObjectId(job_id)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid job ID")
+    
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.get("user_id") != str(user["_id"]):
+        raise HTTPException(status_code=403, detail="Not your job")
+    
+    return {
+        "job_id": job_id,
+        "status": job.get("status", "unknown"),
+        "step": job.get("step", ""),
+        "progress": job.get("progress", 0),
+        "story_id": job.get("story_id"),
+        "error": job.get("error")
+    }
 
 
 @app.get("/api/stories")
