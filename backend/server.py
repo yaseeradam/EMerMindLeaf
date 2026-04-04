@@ -174,14 +174,36 @@ CREDIT_COSTS = {"short": 1, "medium": 2, "long": 3, "extended": 5}
 PAGE_COUNTS = {"short": 3, "medium": 5, "long": 8, "extended": 12}
 
 CREDIT_PACKAGES = [
-    {"id": "starter", "name": "Starter Pack", "credits": 10, "price_ngn": 500, "popular": False},
-    {"id": "value", "name": "Value Pack", "credits": 25, "price_ngn": 1000, "popular": True},
-    {"id": "premium", "name": "Premium Pack", "credits": 60, "price_ngn": 2000, "popular": False},
-    {"id": "mega", "name": "Mega Pack", "credits": 150, "price_ngn": 4000, "popular": False},
+    {"id": "starter", "name": "Starter Pack", "credits": 10, "price_ngn": 2500, "popular": False},
+    {"id": "value", "name": "Value Pack", "credits": 25, "price_ngn": 5000, "popular": True},
+    {"id": "premium", "name": "Premium Pack", "credits": 60, "price_ngn": 10000, "popular": False},
+    {"id": "mega", "name": "Mega Pack", "credits": 150, "price_ngn": 20000, "popular": False},
 ]
 
 
 # ─── AI STORY GENERATION (Improved with cover + character consistency) ───
+
+def compress_image_base64(b64_data, max_size=(800, 600), quality=70, thumb=False):
+    """Compress a base64 image to reduce size. Returns compressed base64 string."""
+    try:
+        from PIL import Image
+        img_bytes = base64.b64decode(b64_data)
+        img = Image.open(BytesIO(img_bytes))
+        if img.mode == 'RGBA':
+            img = img.convert('RGB')
+        
+        target_size = (200, 150) if thumb else max_size
+        img.thumbnail(target_size, Image.Resampling.LANCZOS)
+        
+        buffer = BytesIO()
+        img.save(buffer, format='JPEG', quality=quality if not thumb else 50, optimize=True)
+        buffer.seek(0)
+        return base64.b64encode(buffer.read()).decode('utf-8')
+    except Exception as e:
+        print(f"Image compression failed: {e}")
+        return b64_data  # Return original if compression fails
+
+
 async def generate_story_text(topic, age_range, subject, length, character_traits=None, setting_details=None):
     from emergentintegrations.llm.chat import LlmChat, UserMessage
     
@@ -284,7 +306,10 @@ async def generate_illustration(prompt, art_style="default"):
     text, images = await chat.send_message_multimodal_response(msg)
     
     if images and len(images) > 0:
-        return images[0]['data']
+        raw_b64 = images[0]['data']
+        # Compress the image to reduce storage/bandwidth
+        compressed = compress_image_base64(raw_b64, max_size=(800, 600), quality=75)
+        return compressed
     return None
 
 
@@ -521,6 +546,10 @@ async def _run_story_generation(job_id: str, user_id: str, request_data: dict):
         )
         
         credits_needed = CREDIT_COSTS.get(request_data["length"], 1)
+        
+        # Create thumbnail for library view
+        cover_thumbnail = compress_image_base64(cover_image, thumb=True) if cover_image else None
+        
         story_doc = {
             "title": story_data.get("title", f"Story about {request_data['topic']}"),
             "user_id": user_id,
@@ -534,6 +563,7 @@ async def _run_story_generation(job_id: str, user_id: str, request_data: dict):
             "credits_used": credits_needed,
             "character_bible": character_bible,
             "cover_image": cover_image,
+            "cover_thumbnail": cover_thumbnail,
             "pages": pages_with_images,
             "created_at": datetime.utcnow(),
             "updated_at": datetime.utcnow()
@@ -632,7 +662,7 @@ async def list_stories(user=Depends(get_current_user)):
             "art_style": story.get("art_style", ""),
             "credits_used": story.get("credits_used", 0),
             "page_count": len(story.get("pages", [])),
-            "cover_image": story.get("cover_image"),
+            "cover_thumbnail": story.get("cover_thumbnail") or story.get("cover_image"),
             "created_at": story.get("created_at"),
         }
         stories.append(serialize_doc(story_summary))
@@ -642,6 +672,7 @@ async def list_stories(user=Depends(get_current_user)):
 
 @app.get("/api/stories/{story_id}")
 async def get_story(story_id: str, user=Depends(get_current_user)):
+    """Get story metadata + text (without page images for fast loading)"""
     try:
         story = await stories_collection.find_one({"_id": ObjectId(story_id)})
     except Exception:
@@ -650,7 +681,42 @@ async def get_story(story_id: str, user=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Story not found")
     if story.get("user_id") != str(user["_id"]):
         raise HTTPException(status_code=403, detail="Not your story")
-    return serialize_doc(story)
+    
+    # Return story with page text but strip heavy image data
+    # Images will be fetched per-page via the lazy endpoint
+    result = serialize_doc(story)
+    if result.get("pages"):
+        for page in result["pages"]:
+            page["has_image"] = bool(page.get("image_base64"))
+            # Keep image data for now but frontend will use lazy loading
+    return result
+
+
+@app.get("/api/stories/{story_id}/page/{page_num}/image")
+async def get_page_image(story_id: str, page_num: int, user=Depends(get_current_user)):
+    """Lazy load a single page image"""
+    try:
+        story = await stories_collection.find_one(
+            {"_id": ObjectId(story_id)},
+            {"pages": 1, "user_id": 1, "cover_image": 1}
+        )
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid story ID")
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found")
+    if story.get("user_id") != str(user["_id"]):
+        raise HTTPException(status_code=403, detail="Not your story")
+    
+    # page_num 0 = cover
+    if page_num == 0:
+        return {"image_base64": story.get("cover_image")}
+    
+    pages = story.get("pages", [])
+    idx = page_num - 1
+    if idx < 0 or idx >= len(pages):
+        raise HTTPException(status_code=404, detail="Page not found")
+    
+    return {"image_base64": pages[idx].get("image_base64")}
 
 
 @app.delete("/api/stories/{story_id}")

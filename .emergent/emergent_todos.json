@@ -1,14 +1,26 @@
 [
   {
-    "content": "Phase 1-2: Core POC + MVP App",
-    "status": "completed"
+    "content": "Compress images before storing (reduce base64 size)",
+    "status": "in_progress"
   },
   {
-    "content": "Phase 3-4: Auth + Paystack + Admin + Cover Pages + Character Consistency",
-    "status": "completed"
+    "content": "Add lazy page loading API (load pages one at a time)",
+    "status": "pending"
   },
   {
-    "content": "Fix: Async story generation with polling (no more timeout/stuck at 95%)",
-    "status": "completed"
+    "content": "Frontend: Add in-memory cache for stories/library",
+    "status": "pending"
+  },
+  {
+    "content": "Update credit package pricing to be profitable",
+    "status": "pending"
+  },
+  {
+    "content": "Code payment-credits relationship properly",
+    "status": "pending"
+  },
+  {
+    "content": "Test all changes",
+    "status": "pending"
   }
 ]
