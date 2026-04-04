@@ -1,0 +1,50 @@
+[
+  {
+    "content": "Phase 1: Get integration playbooks (Gemini text + Nano Banana images)",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 1: Get Emergent LLM Key",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 1: Write & run POC script (Gemini text + Nano Banana images + MongoDB)",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 1: Fix POC until all tests pass",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 2: Get design guidelines",
+    "status": "in_progress"
+  },
+  {
+    "content": "Phase 2: Backend implementation (all endpoints)",
+    "status": "pending"
+  },
+  {
+    "content": "Phase 2: Frontend implementation (all pages)",
+    "status": "pending"
+  },
+  {
+    "content": "Phase 2: All user stories covered in Development and testing",
+    "status": "pending"
+  },
+  {
+    "content": "Phase 2: End-to-end testing with testing agent",
+    "status": "pending"
+  },
+  {
+    "content": "Phase 3: Paystack payment integration",
+    "status": "pending"
+  },
+  {
+    "content": "Phase 4: Auth + Admin system",
+    "status": "pending"
+  },
+  {
+    "content": "Phase 5: Hardening & final testing",
+    "status": "pending"
+  }
+]
