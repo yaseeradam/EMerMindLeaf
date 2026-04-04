@@ -287,6 +287,31 @@ async def generate_illustration(prompt, art_style="default"):
 
 
 # ─── ROUTES: Health ───
+@app.on_event("startup")
+async def seed_admin():
+    """Seed a default admin user if none exists"""
+    # Remove old demo user without password
+    await users_collection.delete_many({"email": "demo@mindleaf.com"})
+    
+    existing = await users_collection.find_one({"email": "admin@mindleaf.com"})
+    if not existing:
+        await users_collection.insert_one({
+            "display_name": "Admin",
+            "email": "admin@mindleaf.com",
+            "password_hash": hash_password("admin123"),
+            "role": "admin",
+            "credits": 100,
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        })
+        print("Admin user seeded: admin@mindleaf.com / admin123")
+    elif existing.get("role") != "admin":
+        await users_collection.update_one(
+            {"email": "admin@mindleaf.com"},
+            {"$set": {"role": "admin", "password_hash": hash_password("admin123"), "credits": 100}}
+        )
+
+
 @app.get("/api/health")
 async def health_check():
     return {"status": "healthy", "service": "MindLeaf API", "version": "2.0.0"}

@@ -5,26 +5,26 @@
   },
   {
     "content": "Phase 3-4: Add Auth system (JWT register/login/refresh)",
-    "status": "in_progress"
+    "status": "completed"
   },
   {
     "content": "Phase 3-4: Add Paystack payment code (placeholder keys)",
-    "status": "pending"
+    "status": "completed"
   },
   {
     "content": "Phase 3-4: Improve story generation - cover page/thumbnail + character consistency",
-    "status": "pending"
+    "status": "completed"
   },
   {
     "content": "Phase 3-4: Admin Dashboard (user management, grant credits, change roles)",
-    "status": "pending"
+    "status": "completed"
   },
   {
     "content": "Phase 3-4: Frontend updates (auth screens, buy credits, admin, cover pages)",
-    "status": "pending"
+    "status": "completed"
   },
   {
     "content": "Phase 3-4: End-to-end testing",
-    "status": "pending"
+    "status": "completed"
   }
 ]
